@@ -1,0 +1,55 @@
+name: Build Wrapper Lite
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - lite
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git wget unzip python3 python3-venv file
+
+      - name: Install CMake
+        run: |
+          python3 -m venv "$RUNNER_TEMP/cmake-venv"
+          "$RUNNER_TEMP/cmake-venv/bin/pip" install cmake==3.31.6
+          echo "$RUNNER_TEMP/cmake-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Download Android NDK
+        run: |
+          wget --tries=3 --timeout=30 \
+            -O android-ndk.zip \
+            https://dl.google.com/android/repository/android-ndk-r23b-linux.zip
+          unzip -q android-ndk.zip
+
+      - name: Configure build
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DANDROID_NDK_PATH="$GITHUB_WORKSPACE/android-ndk-r23b" \
+            -DBUILD_HOST_LAUNCHERS=OFF
+
+      - name: Compile lite
+        run: |
+          cmake --build build --target lite --parallel 2
+          file rootfs/system/bin/lite
+
+      - name: Upload compiled program
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrapper-lite-build
+          path: rootfs/system/bin/lite
+          if-no-files-found: error
